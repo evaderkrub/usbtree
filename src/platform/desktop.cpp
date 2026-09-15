@@ -65,6 +65,7 @@ int run_app(int argc, char** argv) {
     Uint64 change_at = 0, notice_at = 0;
 #ifdef USBTREE_E2E
     e2e::start(state,base);
+    bool tests_completed = false;
 #endif
     while (running) {
         SDL_Event event;
@@ -121,7 +122,7 @@ int run_app(int argc, char** argv) {
         SDL_RenderPresent(renderer);
 #ifdef USBTREE_E2E
         const int test_result = e2e::tick();
-        if (test_result >= 0) { exit_code = test_result; running = false; }
+        if (test_result >= 0) { exit_code = std::max(exit_code,test_result); tests_completed = true; running = false; }
 #endif
         ++frames;
         if (smoke && frames > 65 && !state.scanning) { running = false; if (!state.error.empty()) exit_code = 1; }
@@ -135,6 +136,7 @@ int run_app(int argc, char** argv) {
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING,"USB Tree - settings",error.c_str(),window);
     }
 #ifdef USBTREE_E2E
+    if (!tests_completed) exit_code = 1;
     e2e::stop();
 #endif
     ui::shutdown();
@@ -149,4 +151,3 @@ int run(int argc, char** argv) noexcept {
     catch (const std::exception& e) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"USB Tree",e.what(),nullptr); return 1; }
 }
 }
-

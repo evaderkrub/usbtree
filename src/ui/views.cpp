@@ -101,6 +101,10 @@ void overview(app::State& s, const app::Node& n, const Fonts& fonts) {
         {"Serial number",n.serial},{"Instance ID",n.instance_id},{"Location",n.location},{"Driver service",n.service}};
     if (n.port) rows.insert(rows.begin()+1,{"Upstream port",std::to_string(n.port)});
     if (n.kind == app::Kind::Computer) rows = {{"Computer",n.name},{"Host controllers",std::to_string(app::count(n).controllers)},{"Captured",s.snapshot.captured_at}};
+    if (n.kind == app::Kind::EmptyPort) {
+        rows = {{"Status",n.status},{"Hub port",std::to_string(n.port)}};
+        rows.insert(rows.end(),n.properties.begin(),n.properties.end());
+    }
     properties("IdentityProperties",rows);
 }
 }
@@ -173,4 +177,3 @@ void draw_details(app::State& s, const Fonts& fonts) {
     ImGui::End();
 }
 }
-
