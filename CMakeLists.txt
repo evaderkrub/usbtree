@@ -37,7 +37,7 @@ add_library(imgui STATIC ${IMGUI_SOURCES})
 target_include_directories(imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
 
-add_library(usbtree_app STATIC src/app/model.cpp)
+add_library(usbtree_app STATIC src/app/model.cpp src/app/access.cpp)
 target_include_directories(usbtree_app PUBLIC src)
 project_warnings(usbtree_app)
 set(PLATFORM_SOURCES src/platform/files.cpp src/platform/usb_stub.cpp)

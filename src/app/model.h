@@ -7,6 +7,15 @@
 namespace app {
 enum class Kind { Computer, Controller, Hub, Device, EmptyPort };
 struct Property { std::string name; std::string value; };
+struct Volume {
+    std::string id, label, filesystem;
+    std::vector<std::string> mount_paths;
+};
+struct DeviceAccess {
+    std::string instance_id;
+    std::vector<std::string> serial_ports;
+    std::vector<Volume> volumes;
+};
 struct Node {
     std::string id, name, manufacturer, instance_id, service, location;
     Kind kind = Kind::Device;
@@ -16,6 +25,8 @@ struct Node {
     bool connected = true;
     std::vector<std::uint8_t> device_descriptor, configuration;
     std::vector<Property> properties;
+    std::vector<std::string> serial_ports;
+    std::vector<Volume> volumes;
     std::vector<Node> children;
 };
 struct Snapshot {
@@ -48,6 +59,10 @@ bool visible(const Node& node, const std::string& query, bool show_empty);
 void accept_snapshot(State& state, Snapshot snapshot);
 std::string node_report(const Node& node);
 std::string full_report(const Snapshot& snapshot);
+void apply_device_access(Snapshot& snapshot, const std::vector<DeviceAccess>& mappings);
+std::string access_summary(const Node& node);
+std::string display_name(const Node& node);
+std::vector<Property> access_properties(const Node& node);
 std::string hex_dump(const std::vector<std::uint8_t>& bytes);
 bool decode_configuration(const std::vector<std::uint8_t>& bytes, std::vector<Property>& rows, std::string& error);
 float clamp_scale(float value);

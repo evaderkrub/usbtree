@@ -41,12 +41,12 @@ void tree_node(app::State& s, const app::Node& n) {
     else ImGui::SetNextItemOpen(true,ImGuiCond_Once);
     if (n.kind == app::Kind::EmptyPort) ImGui::PushStyleColor(ImGuiCol_Text,{0.43f,0.46f,0.51f,1});
     else if (n.problem_code) ImGui::PushStyleColor(ImGuiCol_Text,{0.9f,0.68f,0.34f,1});
-    const std::string label = std::string(icon(n)) + "  " + (n.port && n.kind != app::Kind::EmptyPort ? std::to_string(n.port) + "   " : "") + n.name + "###" + n.id;
+    const std::string label = std::string(icon(n)) + "  " + (n.port && n.kind != app::Kind::EmptyPort ? std::to_string(n.port) + "   " : "") + app::display_name(n) + "###" + n.id;
     const bool open = ImGui::TreeNodeEx(label.c_str(),flags);
     if (n.kind == app::Kind::EmptyPort || n.problem_code) ImGui::PopStyleColor();
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) s.selected_id = n.id;
     if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip(); ImGui::TextUnformatted(n.name.c_str()); ImGui::TextDisabled("%s",n.status.c_str());
+        ImGui::BeginTooltip(); ImGui::TextUnformatted(app::display_name(n).c_str()); ImGui::TextDisabled("%s",n.status.c_str());
         if (!n.speed.empty()) ImGui::TextUnformatted(n.speed.c_str());
         if (n.vendor_id) ImGui::Text("VID %s  /  PID %s",app::hex(n.vendor_id).c_str(),app::hex(n.product_id).c_str());
         ImGui::EndTooltip();
@@ -64,7 +64,7 @@ void metric(const char* title, const std::string& value, const Fonts& fonts) {
 void inventory(app::State& s, const app::Node& n) {
     if (n.kind == app::Kind::Device) {
         ImGui::TableNextRow(); ImGui::TableNextColumn(); ImGui::PushID(n.id.c_str());
-        if (ImGui::Selectable(n.name.c_str(),s.selected_id == n.id,ImGuiSelectableFlags_SpanAllColumns)) s.selected_id = n.id;
+        if (ImGui::Selectable((app::display_name(n) + "###Device").c_str(),s.selected_id == n.id,ImGuiSelectableFlags_SpanAllColumns)) s.selected_id = n.id;
         ImGui::PopID(); ImGui::TableNextColumn(); ImGui::TextWrapped("%s",n.speed.c_str());
         ImGui::TableNextColumn(); ImGui::Text("%s:%s",app::hex(n.vendor_id).c_str(),app::hex(n.product_id).c_str());
     }
@@ -96,6 +96,10 @@ void overview(app::State& s, const app::Node& n, const Fonts& fonts) {
         }
         ImGui::Spacing();
     }
+    const auto access = app::access_properties(n);
+    if (!access.empty()) {
+        ImGui::SeparatorText("COM ports & drives"); properties("DeviceAccess",access); ImGui::Spacing();
+    }
     ImGui::SeparatorText("Connection & identity");
     std::vector<app::Property> rows = {{"Status",n.status},{"Connection speed",n.speed},{"Manufacturer",n.manufacturer},
         {"Serial number",n.serial},{"Instance ID",n.instance_id},{"Location",n.location},{"Driver service",n.service}};
@@ -113,7 +117,7 @@ void draw_tree(app::State& s, const Fonts&) {
     const float scale = ImGui::GetStyle().FontScaleMain;
     ImGui::SetNextItemWidth(std::max(40.0f,ImGui::GetContentRegionAvail().x - 44 * scale));
     if (s.focus_search) { ImGui::SetKeyboardFocusHere(); s.focus_search = false; }
-    ImGui::InputTextWithHint("###Search",ICON_MD_SEARCH "  Search name, VID:PID, serial...",s.search.data(),s.search.size());
+    ImGui::InputTextWithHint("###Search",ICON_MD_SEARCH "  Search device, COM port, drive...",s.search.data(),s.search.size());
     ImGui::SameLine(); if (ImGui::Button(ICON_MD_CLOSE "###ClearSearch")) s.search[0] = '\0';
     ImGui::Checkbox("Empty ports",&s.show_empty); ImGui::SameLine();
     if (ImGui::SmallButton(ICON_MD_UNFOLD_MORE "###Expand")) s.expand_tree = 1;
@@ -122,11 +126,11 @@ void draw_tree(app::State& s, const Fonts&) {
     ImGui::BeginChild("Tree",{0,-ImGui::GetFrameHeightWithSpacing()},ImGuiChildFlags_None,ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{4 * scale,4 * scale});
     if (!app::visible(s.snapshot.root,s.search.data(),s.show_empty)) {
-        ImGui::Spacing(); ImGui::TextUnformatted("No matching devices"); ImGui::TextWrapped("Try a device name, vendor ID or serial number.");
+        ImGui::Spacing(); ImGui::TextUnformatted("No matching devices"); ImGui::TextWrapped("Try a device name, VID:PID, serial number, COM port or drive letter.");
     } else tree_node(s,s.snapshot.root);
     ImGui::PopStyleVar(); ImGui::EndChild(); s.expand_tree = 0;
     ImGui::Checkbox("Watch device changes",&s.auto_refresh);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Refresh after Windows reports a device connection or removal");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Refresh after the system reports a device connection or removal");
     ImGui::End();
 }
 void draw_details(app::State& s, const Fonts& fonts) {
@@ -143,11 +147,19 @@ void draw_details(app::State& s, const Fonts& fonts) {
     ImGui::PushFont(fonts.bold,25); ImGui::TextWrapped("%s  %s",icon(n),n.name.c_str()); ImGui::PopFont();
     ImGui::TextColored(n.problem_code ? ImVec4{0.9f,0.68f,0.34f,1} : ImVec4{0.4f,0.73f,0.48f,1},"%s",n.status.c_str());
     if (!n.speed.empty()) { ImGui::SameLine(); ImGui::TextDisabled(" /  %s",n.speed.c_str()); }
+    const auto access = app::access_summary(n);
+    if (!access.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text,{0.60f,0.77f,0.95f,1});
+        ImGui::TextWrapped("%s",access.c_str()); ImGui::PopStyleColor();
+    }
     ImGui::Spacing(); if (ImGui::Button(ICON_MD_CONTENT_COPY "  Copy details###CopyDetails")) s.copy_requested = true;
     ImGui::Spacing();
     if (ImGui::BeginTabBar("DetailTabs")) {
         if (ImGui::BeginTabItem("Overview")) { overview(s,n,fonts); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Properties")) { properties("Properties",n.properties); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Properties")) {
+            auto rows = app::access_properties(n); rows.insert(rows.end(),n.properties.begin(),n.properties.end());
+            properties("Properties",rows); ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Descriptors")) {
             if (n.device_descriptor.size() < 18) ImGui::TextWrapped("No device descriptor is available for this node. Select a connected USB device.");
             else {

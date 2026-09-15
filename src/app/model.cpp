@@ -12,7 +12,7 @@ std::string lower(std::string text) {
     return text;
 }
 void report_tree(const Node& node, std::ostringstream& out, int depth) {
-    out << std::string(static_cast<std::size_t>(depth) * 2, ' ') << node.name << " [" << node.status << "]\n";
+    out << std::string(static_cast<std::size_t>(depth) * 2, ' ') << display_name(node) << " [" << node.status << "]\n";
     for (const Node& child : node.children) report_tree(child, out, depth + 1);
 }
 void report_details(const Node& node, std::ostringstream& out) {
@@ -58,6 +58,7 @@ bool matches(const Node& n, const std::string& query) {
     std::string searchable = n.name + " " + n.manufacturer + " " + n.instance_id + " " + n.serial + " " + n.service + " " +
         hex(n.vendor_id) + ":" + hex(n.product_id) + " " + n.speed + " " + n.status;
     for (const auto& p : n.properties) searchable += " " + p.value;
+    for (const auto& p : access_properties(n)) searchable += " " + p.value;
     const auto haystack = lower(std::move(searchable));
     std::istringstream tokens(lower(query));
     std::string token;
@@ -121,10 +122,11 @@ bool decode_configuration(const std::vector<std::uint8_t>& b, std::vector<Proper
 }
 std::string node_report(const Node& n) {
     std::ostringstream o;
-    o << n.name << "\n" << std::string(64, '-') << "\nType: " << kind_name(n.kind) << "\nStatus: " << n.status
+    o << display_name(n) << "\n" << std::string(64, '-') << "\nType: " << kind_name(n.kind) << "\nStatus: " << n.status
       << "\nInstance ID: " << n.instance_id << "\nManufacturer: " << n.manufacturer << "\nService: " << n.service
       << "\nLocation: " << n.location << "\nPort: " << n.port << "\nSpeed: " << n.speed << "\nVID:PID: "
       << hex(n.vendor_id) << ':' << hex(n.product_id) << "\nSerial: " << n.serial << '\n';
+    for (const auto& p : access_properties(n)) o << p.name << ": " << p.value << '\n';
     for (const auto& p : n.properties) o << p.name << ": " << p.value << '\n';
     if (!n.device_descriptor.empty()) o << "\nDevice descriptor\n" << hex_dump(n.device_descriptor);
     std::vector<Property> rows; std::string error;
@@ -159,7 +161,7 @@ Snapshot demo_snapshot() {
     Snapshot s; s.captured_at = "Test fixture";
     s.root.id = "computer"; s.root.name = "Test workstation"; s.root.kind = Kind::Computer;
     Node c; c.id = "controller"; c.name = "USB xHCI host controller"; c.kind = Kind::Controller;
-    Node h; h.id = "hub"; h.name = "USB Root Hub (USB 3.0)"; h.kind = Kind::Hub; h.port_count = 3;
+    Node h; h.id = "hub"; h.name = "USB Root Hub (USB 3.0)"; h.kind = Kind::Hub; h.port_count = 4;
     Node d; d.id = "keyboard"; d.name = "Studio Keyboard"; d.manufacturer = "Test Devices";
     d.vendor_id = 0x1234; d.product_id = 0xabcd; d.port = 1; d.speed = "Full-Speed (12 Mbit/s)";
     d.serial = "TEST-001"; d.instance_id = "USB\\VID_1234&PID_ABCD\\TEST-001"; d.service = "HidUsb";
@@ -171,7 +173,13 @@ Snapshot demo_snapshot() {
     h.children.push_back(empty);
     Node disk; disk.id = "disk"; disk.name = "Portable SSD"; disk.port = 3; disk.speed = "SuperSpeed (5 Gbit/s)";
     disk.vendor_id = 0x0781; disk.product_id = 0x5588; disk.service = "UASPStor";
-    h.children.push_back(disk); c.children.push_back(h); s.root.children.push_back(c);
+    disk.instance_id = "USB\\VID_0781&PID_5588\\TEST-DISK";
+    disk.volumes = {{"volume-projects", "PROJECTS", "exFAT", {"E:\\"}}, {"volume-archive", "ARCHIVE", "NTFS", {"F:\\", "C:\\Mounts\\Archive\\"}}};
+    h.children.push_back(disk);
+    Node serial; serial.id = "serial"; serial.name = "Dual Serial Adapter"; serial.port = 4;
+    serial.instance_id = "USB\\VID_0403&PID_6010\\TEST-SERIAL"; serial.vendor_id = 0x0403; serial.product_id = 0x6010;
+    serial.serial_ports = {"COM3", "COM12"}; serial.speed = "Full-Speed (12 Mbit/s)";
+    h.children.push_back(serial); c.children.push_back(h); s.root.children.push_back(c);
     return s;
 }
 }

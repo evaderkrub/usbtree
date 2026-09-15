@@ -7,7 +7,7 @@ int main() {
     try {
         auto snapshot = app::demo_snapshot();
         auto counts = app::count(snapshot.root);
-        check(counts.controllers == 1 && counts.hubs == 1 && counts.devices == 2 && counts.empty_ports == 1, "Topology counts");
+        check(counts.controllers == 1 && counts.hubs == 1 && counts.devices == 3 && counts.empty_ports == 1, "Topology counts");
         const auto* keyboard = app::find(snapshot.root, "keyboard");
         check(keyboard && app::matches(*keyboard, "1234 ABCD"), "Case insensitive ID search");
         check(app::visible(snapshot.root, "studio keyboard", false), "Search retains ancestors");
@@ -34,6 +34,40 @@ int main() {
         check(restored.scale == 1.5f, "Corrupt preferences preserve defaults");
         app::load_preferences("99 0 1 -100 99999", restored, w, h);
         check(restored.scale == 2 && w == 800 && h == 4320, "Clamp invalid saved dimensions");
+        const auto* serial = app::find(snapshot.root, "serial");
+        const auto* disk = app::find(snapshot.root, "disk");
+        check(serial && disk, "Access fixtures exist");
+        check(app::display_name(*serial) == "[COM3, COM12] Dual Serial Adapter", "COM ports visible in tree labels");
+        check(app::display_name(*disk) == "[E:, F:] Portable SSD", "Multiple drive letters visible");
+        check(app::visible(snapshot.root, "com12", false) && !app::matches(*disk, "com12"), "COM search retains correct ancestors");
+        check(app::matches(*disk, "f: archive") && app::matches(*disk, "c:\\mounts\\archive"), "Search volume labels and folder mounts");
+        check(app::node_report(*disk).find("exFAT") != std::string::npos, "Device report includes filesystem");
+        check(app::full_report(snapshot).find("COM12") != std::string::npos, "Export includes COM ports");
+        const std::string serial_id = serial->instance_id, disk_id = disk->instance_id;
+        app::apply_device_access(snapshot, {
+            {serial_id, {"COM12", "COM3", "COM3"}, {}},
+            {serial_id, {"COM2"}, {}},
+            {disk_id, {}, {{"volume", "", "", {"E:\\"}}}},
+            {disk_id, {}, {{"volume", "PROJECTS", "exFAT", {"E:\\", "C:\\Mounts\\Projects\\"}}}},
+            {"USB\\REMOVED", {"COM99"}, {{"foreign", "INTERNAL", "NTFS", {"C:\\"}}}}
+        });
+        serial = app::find(snapshot.root, "serial"); disk = app::find(snapshot.root, "disk");
+        check(app::access_summary(*serial) == "COM2, COM3, COM12", "Merge, deduplicate and naturally sort COM numbers");
+        check(disk->volumes.size() == 1 && disk->volumes[0].mount_paths.size() == 2 &&
+            disk->volumes[0].label == "PROJECTS" && disk->volumes[0].filesystem == "exFAT", "Merge volume mappings by identity");
+        check(app::access_summary(*disk) == "E:" && !app::visible(snapshot.root, "COM99", false), "Do not misassign foreign devices or turn folder mounts into drive letters");
+        check(snapshot.root.serial_ports.empty(), "Endpoint mapping does not attach to computer");
+        app::apply_device_access(snapshot, {{disk_id, {}, {{"Drive E:\\", "", "", {"E:\\"}}}}});
+        serial = app::find(snapshot.root, "serial"); disk = app::find(snapshot.root, "disk");
+        check(serial->serial_ports.empty() && app::display_name(*serial) == serial->name, "Refresh clears stale assignments");
+        check(app::access_summary(*disk) == "E:" && app::node_report(*disk).find("media may be unavailable") != std::string::npos, "Letter remains visible when filesystem is unavailable");
+        app::apply_device_access(snapshot, {{disk_id, {}, {{"unmounted", "BACKUP", "NTFS", {}}}}});
+        disk = app::find(snapshot.root, "disk");
+        check(app::access_summary(*disk).empty() && app::node_report(*disk).find("No mount point") != std::string::npos, "Unmounted volumes have no invented drive letters");
+        app::Node detached; detached.kind = app::Kind::Device; detached.instance_id = "detached"; detached.connected = false;
+        snapshot.root.children.push_back(detached);
+        app::apply_device_access(snapshot, {{"detached", {"COM99"}, {}}});
+        check(snapshot.root.children.back().serial_ports.empty(), "Disconnected device does not receive new mappings");
         std::cout << "All model tests passed\n"; return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

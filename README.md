@@ -26,7 +26,8 @@ Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. No installation
 
 - A dockable controller / hub / port tree, including nested hubs and optional empty ports.
 - An inventory of connected devices in each branch.
-- Search by name, VID:PID, serial, instance ID, service and collected Windows properties, including child-function names such as COM ports. Multiple search terms must all match the same device; ancestors stay visible.
+- Windows COM ports and drive letters shown beside device names in the tree and inventory, plus the Overview and Properties tabs. Composite serial devices can show several COM ports; USB storage can show several volumes, drive letters and folder mount points, with volume labels and filesystems when available. Assigned letters remain visible when media cannot be read.
+- Search by name, VID:PID, serial, instance ID, service, COM port, drive letter, volume label, mount path and collected Windows properties. Multiple search terms must all match the same device; ancestors stay visible.
 - Device identity, negotiated USB speed, manufacturer, serial, driver provider/version, PnP status, location, connector and companion-port information where Windows provides them.
 - Device descriptors, configuration/interface/endpoint decoding, and raw hexadecimal bytes.
 - Read-only inspection with visible warnings for inaccessible hubs or descriptor queries. Failed scans preserve the previous successful snapshot.
@@ -101,15 +102,15 @@ On macOS/Linux the shared UI can be built with CMake/Ninja and run with --demo. 
 
 CTest runs four test binaries/scripts on Windows:
 
-1. **model_tests**: search and ancestor visibility, topology counts, selection preservation/removal, report generation, descriptor decoding and malformed lengths, scale validation, settings round trips and invalid saved dimensions.
+1. **model_tests**: search and ancestor visibility, topology counts, selection preservation/removal, report generation, descriptor decoding and malformed lengths, scale validation, settings round trips and invalid saved dimensions. Access-mapping tests cover composite serial devices, multiple volumes, duplicate assignments, folder mounts, unmounted/unreadable media, stale assignments and unrelated devices.
 2. **platform_tests**: a live Windows scan, unique node IDs, report writing, and actual controllers/hubs/devices. Hardware counts are observations, not fixed expectations.
-3. **usbtree_e2e**: six ImGui Test Engine scenarios against the actual SDL renderer, shared application UI and actions: filtering/selection, empty ports/no results, descriptor tabs/clipboard, About modality, refresh/export, scaling and narrow windows. Deterministic device fixtures allow these tests to run without specific hardware. Clipboard text is restored afterward.
+3. **usbtree_e2e**: seven ImGui Test Engine scenarios against the actual SDL renderer, shared application UI and actions: filtering/selection, empty ports/no results, descriptor tabs/clipboard, About modality, refresh/export, COM-port/drive-letter display/search/copy/export, scaling and narrow windows. Deterministic device fixtures allow these tests to run without specific hardware. Clipboard text is restored afterward.
 4. **portable_folder**: checks executable imports, copies the product to a Unicode folder, maps a temporary drive letter, launches from another working directory with minimal PATH, and verifies a rendered screenshot. The temporary drive mapping is removed when the test finishes.
 
 Test artifacts are under the selected build directory:
 
 - e2e/test-results/imgui-e2e.xml: JUnit results.
-- e2e/captures: screenshots of selection, empty ports, no matches, descriptors, raw bytes, About, narrow layout, 150% scale and maximum zoom.
+- e2e/captures: screenshots of selection, COM ports, drive letters, empty ports, no matches, descriptors, raw bytes, About, narrow layout, 150% scale and maximum zoom.
 - test-results/live-topology.txt: the actual machine's USB report.
 - portable-check/imports.txt and result.txt: dependency and relocation evidence.
 
@@ -141,9 +142,11 @@ The drawing code reads and edits plain application state; it does not own the US
 
 The Windows backend follows the topology approach documented by [Microsoft's USBView sample](https://learn.microsoft.com/en-us/samples/microsoft/windows-driver-samples/usbview-sample-application/). Future backends implement platform::enumerate_usb without introducing OS structures into app::Node or the drawing code.
 
+Windows access mappings follow the PnP parent chain from [COM-port interfaces](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/guid-devinterface-comport) and storage interfaces to the physical USB device, including composite and FTDI child devices. Volume disk extents and [storage device numbers](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-ioctl_storage_get_device_number) connect mounted volumes to the correct disk; [volume mount paths](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamesforvolumenamew) supply drive letters and folder mounts. The scan queries metadata without opening a serial connection or changing drive assignments. Refresh rescans these mappings; use F5 after changing drive letters or mount points manually.
+
 ## Current scope
 
-This is a working first Windows version, not full UsbTreeView feature parity. It does not yet implement macOS/Linux enumeration, device eject/restart, drive-letter/volume mapping, USB4/Thunderbolt topology, saved-report import, or audio/video/HID class-specific descriptor decoding. Child PnP functions are listed as properties of their USB device.
+This is a working first Windows version, not full UsbTreeView feature parity. It does not yet implement macOS/Linux enumeration, device eject/restart, USB4/Thunderbolt topology, saved-report import, or audio/video/HID class-specific descriptor decoding. Child PnP functions are listed as properties of their USB device.
 
 Descriptor access and connector details depend on the Windows USB stack and the device. SuperSpeedPlus is shown as 10 Gbit/s or higher; exact 10/20 Gbit/s lane rates are not inferred. Port numbers describe logical hub ports, which may include firmware-defined or internal ports.
 

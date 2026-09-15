@@ -8,6 +8,12 @@
 #include <devpkey.h>
 #include <usbioctl.h>
 #include <usbiodef.h>
+// The SDK serial header repeats legacy constants from winioctl.h with different casts.
+#pragma warning(push)
+#pragma warning(disable:4005)
+#include <ntddser.h>
+#pragma warning(pop)
+#include <ntddstor.h>
 #include <algorithm>
 #include <cwctype>
 #include <map>
@@ -45,12 +51,12 @@ std::string win_error(DWORD code) {
     while (!s.empty() && (s.back() == '\r' || s.back() == '\n')) s.pop_back();
     return s + " (" + std::to_string(code) + ")";
 }
-bool ioctl(HANDLE h, DWORD code, void* buffer, DWORD bytes, DWORD* actual = nullptr) {
+bool ioctl(HANDLE h, DWORD code, void* buffer, DWORD bytes, DWORD* actual = nullptr, bool output_only = false) {
     Handle event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
     if (!event) return false;
     OVERLAPPED op{}; op.hEvent = event.value;
     DWORD returned = 0;
-    bool ok = DeviceIoControl(h, code, buffer, bytes, buffer, bytes, &returned, &op) != FALSE;
+    bool ok = DeviceIoControl(h, code, output_only ? nullptr : buffer, output_only ? 0 : bytes, buffer, bytes, &returned, &op) != FALSE;
     if (!ok && GetLastError() == ERROR_IO_PENDING) {
         // Query cancellation bounds delays from ordinary slow devices; enumeration never runs on the UI thread.
         if (WaitForSingleObject(event.value, 1500) != WAIT_OBJECT_0) {
@@ -129,6 +135,169 @@ DeviceMap collect_metadata() {
         if (!driver.empty()) map.emplace(folded(driver), metadata(set.value, dev));
     }
     return map;
+}
+struct ThreadErrorMode {
+    DWORD previous = 0;
+    bool changed = SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, &previous) != FALSE;
+    ~ThreadErrorMode() { if (changed) SetThreadErrorMode(previous, nullptr); }
+};
+std::string usb_ancestor(DEVINST dev) {
+    for (int depth = 0; depth < 64; ++depth) {
+        wchar_t text[MAX_DEVICE_ID_LEN]{};
+        if (CM_Get_Device_IDW(dev, text, MAX_DEVICE_ID_LEN, 0) != CR_SUCCESS) return {};
+        const auto id = folded(text);
+        // Interface children (MI_xx), serial bus children and UASP disks belong to their physical USB parent.
+        if (id.starts_with(L"usb\\vid_") && id.substr(0, id.find(L'\\', 4)).find(L"&mi_") == std::wstring::npos)
+            return utf8(text);
+        DEVINST parent = 0;
+        if (CM_Get_Parent(&parent, dev, 0) != CR_SUCCESS || parent == dev) return {};
+        dev = parent;
+    }
+    return {};
+}
+template<class F> void device_interfaces(const GUID& guid, std::vector<std::string>& warnings, F&& visit) {
+    DeviceSet set(SetupDiGetClassDevsW(&guid, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE));
+    if (set.value == INVALID_HANDLE_VALUE) { warnings.push_back("Device access enumeration: " + win_error(GetLastError())); return; }
+    for (DWORD i = 0;; ++i) {
+        SP_DEVICE_INTERFACE_DATA iface{}; iface.cbSize = sizeof(iface);
+        if (!SetupDiEnumDeviceInterfaces(set.value, nullptr, &guid, i, &iface)) {
+            if (GetLastError() != ERROR_NO_MORE_ITEMS) warnings.push_back("Device access enumeration: " + win_error(GetLastError()));
+            break;
+        }
+        DWORD bytes = 0;
+        SetupDiGetDeviceInterfaceDetailW(set.value, &iface, nullptr, 0, &bytes, nullptr);
+        if (bytes < sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) || bytes > 65536) continue;
+        std::vector<BYTE> buffer(bytes);
+        auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(buffer.data()); detail->cbSize = sizeof(*detail);
+        SP_DEVINFO_DATA dev{}; dev.cbSize = sizeof(dev);
+        if (SetupDiGetDeviceInterfaceDetailW(set.value, &iface, detail, bytes, nullptr, &dev))
+            visit(set.value, iface, dev, detail->DevicePath);
+    }
+}
+std::string serial_port(HDEVINFO set, SP_DEVICE_INTERFACE_DATA& iface, SP_DEVINFO_DATA& dev) {
+    wchar_t name[256]{};
+    DEVPROPTYPE type = 0;
+    if (!SetupDiGetDeviceInterfacePropertyW(set, &iface, &DEVPKEY_DeviceInterface_Serial_PortName, &type,
+        reinterpret_cast<BYTE*>(name), sizeof(name) - sizeof(wchar_t), nullptr, 0) || type != DEVPROP_TYPE_STRING) {
+        // Older serial drivers expose PortName only on the device's hardware registry key.
+        HKEY key = SetupDiOpenDevRegKey(set, &dev, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_QUERY_VALUE);
+        if (key == INVALID_HANDLE_VALUE) return {};
+        DWORD bytes = sizeof(name) - sizeof(wchar_t), registry_type = 0;
+        const auto result = RegQueryValueExW(key, L"PortName", nullptr, &registry_type, reinterpret_cast<BYTE*>(name), &bytes);
+        RegCloseKey(key);
+        if (result != ERROR_SUCCESS || registry_type != REG_SZ) return {};
+    }
+    auto normalized = folded(name);
+    if (!normalized.starts_with(L"com") || normalized.size() <= 3 ||
+        !std::all_of(normalized.begin() + 3, normalized.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; })) return {};
+    return "COM" + utf8(normalized.substr(3));
+}
+HANDLE open_storage(const std::wstring& path) {
+    // Zero desired access queries identity without locking the volume or requiring elevation.
+    return CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+}
+using StorageKey = std::pair<DWORD, DWORD>;
+using StorageMap = std::map<StorageKey, std::string>;
+std::set<std::string> volume_owners(HANDLE handle, const StorageMap& disks) {
+    std::set<std::string> owners;
+    std::vector<BYTE> buffer(offsetof(VOLUME_DISK_EXTENTS, Extents) + 4096 * sizeof(DISK_EXTENT), 0);
+    DWORD bytes = 0;
+    if (ioctl(handle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, buffer.data(), static_cast<DWORD>(buffer.size()), &bytes, true)) {
+        const auto* extents = reinterpret_cast<const VOLUME_DISK_EXTENTS*>(buffer.data());
+        if (bytes >= offsetof(VOLUME_DISK_EXTENTS, Extents) &&
+            extents->NumberOfDiskExtents <= (bytes - offsetof(VOLUME_DISK_EXTENTS, Extents)) / sizeof(DISK_EXTENT)) {
+            for (DWORD i = 0; i < extents->NumberOfDiskExtents; ++i) {
+                const auto found = disks.find({FILE_DEVICE_DISK, extents->Extents[i].DiskNumber});
+                if (found != disks.end()) owners.insert(found->second);
+            }
+        }
+    }
+    // Optical drives and removable drives without media may have an assigned letter but no volume extents.
+    if (owners.empty()) {
+        STORAGE_DEVICE_NUMBER number{};
+        if (ioctl(handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, &number, sizeof(number), nullptr, true)) {
+            if (const auto found = disks.find({number.DeviceType, number.DeviceNumber}); found != disks.end()) owners.insert(found->second);
+        }
+    }
+    return owners;
+}
+std::vector<std::string> mount_paths(const std::wstring& volume) {
+    DWORD needed = 0;
+    std::vector<wchar_t> paths(512, 0);
+    if (!GetVolumePathNamesForVolumeNameW(volume.c_str(), paths.data(), static_cast<DWORD>(paths.size()), &needed)) {
+        if (GetLastError() != ERROR_MORE_DATA || needed > 1024 * 1024) return {};
+        paths.assign(static_cast<std::size_t>(needed) + 1, 0);
+        if (!GetVolumePathNamesForVolumeNameW(volume.c_str(), paths.data(), static_cast<DWORD>(paths.size()), &needed)) return {};
+    }
+    std::vector<std::string> result;
+    for (const wchar_t* p = paths.data(); *p; p += wcslen(p) + 1) result.push_back(utf8(p));
+    return result;
+}
+void map_volume(const std::wstring& path, const std::wstring& id, std::vector<std::string> paths,
+    const StorageMap& disks, std::vector<app::DeviceAccess>& mappings) {
+    auto device_path = path;
+    if (device_path.ends_with(L'\\')) device_path.pop_back();
+    Handle handle(open_storage(device_path));
+    if (!handle) return;
+    const auto owners = volume_owners(handle.value, disks);
+    if (owners.empty()) return;
+    app::Volume volume; volume.id = utf8(id); volume.mount_paths = std::move(paths);
+    wchar_t label[256]{}, filesystem[256]{};
+    const auto root = path.starts_with(L"\\\\.\\") ? path.substr(4) : path;
+    if (GetVolumeInformationW(root.c_str(), label, 256, nullptr, nullptr, nullptr, filesystem, 256)) {
+        volume.label = utf8(label); volume.filesystem = utf8(filesystem);
+    }
+    for (const auto& owner : owners) mappings.push_back({owner, {}, {volume}});
+}
+void collect_device_access(app::Snapshot& snapshot) {
+    ThreadErrorMode error_mode;
+    std::vector<app::DeviceAccess> mappings;
+    device_interfaces(GUID_DEVINTERFACE_COMPORT, snapshot.warnings,
+        [&](HDEVINFO set, SP_DEVICE_INTERFACE_DATA& iface, SP_DEVINFO_DATA& dev, const wchar_t*) {
+            auto owner = usb_ancestor(dev.DevInst);
+            if (owner.empty()) return;
+            auto port = serial_port(set, iface, dev);
+            if (!port.empty()) mappings.push_back({std::move(owner), {std::move(port)}, {}});
+        });
+    StorageMap disks;
+    auto collect_disk = [&](HDEVINFO, SP_DEVICE_INTERFACE_DATA&, SP_DEVINFO_DATA& dev, const wchar_t* path) {
+        auto owner = usb_ancestor(dev.DevInst);
+        if (owner.empty()) return;
+        Handle handle(open_storage(path));
+        STORAGE_DEVICE_NUMBER number{};
+        if (handle && ioctl(handle.value, IOCTL_STORAGE_GET_DEVICE_NUMBER, &number, sizeof(number), nullptr, true))
+            disks.emplace(StorageKey{number.DeviceType, number.DeviceNumber}, std::move(owner));
+    };
+    device_interfaces(GUID_DEVINTERFACE_DISK, snapshot.warnings, collect_disk);
+    device_interfaces(GUID_DEVINTERFACE_CDROM, snapshot.warnings, collect_disk);
+    if (!disks.empty()) {
+        struct VolumeSearch {
+            HANDLE value;
+            ~VolumeSearch() { if (value != INVALID_HANDLE_VALUE) FindVolumeClose(value); }
+        };
+        wchar_t volume[1024]{};
+        VolumeSearch search{FindFirstVolumeW(volume, 1024)};
+        if (search.value != INVALID_HANDLE_VALUE) {
+            do { map_volume(volume, volume, mount_paths(volume), disks, mappings); }
+            while (FindNextVolumeW(search.value, volume, 1024));
+            if (GetLastError() != ERROR_NO_MORE_FILES) snapshot.warnings.push_back("Volume enumeration: " + win_error(GetLastError()));
+        }
+        // Empty removable slots are omitted by FindFirstVolume but can still own a drive letter.
+        wchar_t roots[512]{};
+        const DWORD count = GetLogicalDriveStringsW(512, roots);
+        if (count > 0 && count < 512) {
+            for (const wchar_t* root = roots; *root; root += wcslen(root) + 1) {
+                const UINT type = GetDriveTypeW(root);
+                if (type != DRIVE_REMOVABLE && type != DRIVE_FIXED && type != DRIVE_CDROM) continue;
+                std::wstring id;
+                if (GetVolumeNameForVolumeMountPointW(root, volume, 1024)) id = volume;
+                else id = std::wstring(L"Drive ") + root;
+                map_volume(std::wstring(L"\\\\.\\") + root, id, {utf8(root)}, disks, mappings);
+            }
+        }
+    }
+    app::apply_device_access(snapshot, mappings);
 }
 std::wstring node_name(HANDLE hub, ULONG port, bool driver) {
     std::vector<BYTE> buffer(8192, 0);
@@ -317,6 +486,7 @@ bool enumerate_usb(app::Snapshot& snapshot, std::string& error) noexcept {
             } else result.warnings.push_back(controller.name + ": " + win_error(GetLastError()));
             result.root.children.push_back(std::move(controller));
         }
+        collect_device_access(result);
         snapshot = std::move(result); error.clear(); return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

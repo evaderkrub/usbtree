@@ -98,6 +98,38 @@ void register_tests() {
         IM_CHECK(report.find("Studio Keyboard") != std::string::npos);
         IM_CHECK(report.find("Portable SSD") != std::string::npos);
     };
+    t = IM_REGISTER_TEST(engine,"usbtree","com_ports_and_drive_letters");
+    t->TestFunc = [](ImGuiTestContext* ctx) {
+        reset(ctx); ctx->SetRef("Connections");
+        const std::string serial_label = ctx->ItemInfo("**/###serial").DebugLabel;
+        const std::string disk_label = ctx->ItemInfo("**/###disk").DebugLabel;
+        IM_CHECK(serial_label.find("[COM3, COM12]") != std::string::npos);
+        IM_CHECK(disk_label.find("[E:, F:]") != std::string::npos);
+        ctx->ItemInputValue("###Search","com12");
+        ctx->ItemClick("**/###serial"); IM_CHECK_EQ(state->selected_id,"serial");
+        IM_CHECK(!ctx->ItemExists("**/###disk"));
+        ctx->SetRef("Device details"); ctx->ItemClick("DetailTabs/Overview");
+        screenshot(ctx,"com-ports.bmp");
+        ctx->ItemClick("###CopyDetails"); ctx->Yield(3);
+        char* text = SDL_GetClipboardText(); std::string report = text ? text : ""; SDL_free(text);
+        IM_CHECK(report.find("COM ports: COM3, COM12") != std::string::npos);
+        ctx->SetRef("Connections"); ctx->ItemInputValue("###Search","f:");
+        ctx->ItemClick("**/###disk"); IM_CHECK_EQ(state->selected_id,"disk");
+        IM_CHECK(!ctx->ItemExists("**/###serial"));
+        ctx->SetRef("Device details"); screenshot(ctx,"drive-letters.bmp");
+        ctx->ItemClick("DetailTabs/Properties"); ctx->Yield(3);
+        ctx->ItemClick("###CopyDetails"); ctx->Yield(3);
+        text = SDL_GetClipboardText(); report = text ? text : ""; SDL_free(text);
+        IM_CHECK(report.find("E:\\") != std::string::npos && report.find("F:\\") != std::string::npos);
+        IM_CHECK(report.find("C:\\Mounts\\Archive\\") != std::string::npos);
+        IM_CHECK(report.find("PROJECTS") != std::string::npos && report.find("exFAT") != std::string::npos);
+        ctx->ItemClick("DetailTabs/Overview");
+        ctx->SetRef("Toolbar"); ctx->ItemClick("###Export"); ctx->Yield(5);
+        IM_CHECK(state->error.empty() && state->notice.starts_with("Saved reports/"));
+        std::ifstream in(output / state->notice.substr(6),std::ios::binary);
+        const std::string exported((std::istreambuf_iterator<char>(in)),std::istreambuf_iterator<char>());
+        IM_CHECK(exported.find("COM12") != std::string::npos && exported.find("[E:, F:]") != std::string::npos);
+    };
     t = IM_REGISTER_TEST(engine,"usbtree","scaling_and_narrow_window");
     t->TestFunc = [](ImGuiTestContext* ctx) {
         reset(ctx); ctx->SetRef("Toolbar"); ctx->ItemClick("###Scale");
@@ -147,7 +179,7 @@ int tick() {
     if (frames < 10 || !ImGuiTestEngine_IsTestQueueEmpty(engine)) return -1;
     ImGuiTestEngineResultSummary summary; ImGuiTestEngine_GetResultSummary(engine,&summary);
     std::cout << summary.CountSuccess << "/" << summary.CountTested << " ImGui end-to-end tests passed\n";
-    return summary.CountTested == 6 && summary.CountSuccess == 6 ? 0 : 1;
+    return summary.CountTested == 7 && summary.CountSuccess == 7 ? 0 : 1;
 }
 void stop() { ImGuiTestEngine_Stop(engine); }
 void destroy() { ImGuiTestEngine_DestroyContext(engine); engine = nullptr; SDL_SetClipboardText(original_clipboard.c_str()); }
