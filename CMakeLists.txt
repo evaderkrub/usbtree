@@ -59,6 +59,8 @@ set_target_properties(UsbTree PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINAR
 add_custom_target(stage_assets ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "${CMAKE_BINARY_DIR}/portable/UsbTree/assets"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/README.md" "${CMAKE_BINARY_DIR}/portable/UsbTree/README.md"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_BINARY_DIR}/portable/UsbTree/LICENSE"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/docs" "${CMAKE_BINARY_DIR}/portable/UsbTree/docs"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL3_SOURCE_DIR}/LICENSE.txt" "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses/SDL.txt"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${imgui_SOURCE_DIR}/LICENSE.txt" "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses/ImGui.txt")
@@ -107,7 +109,8 @@ endif()
 
 install(TARGETS UsbTree RUNTIME DESTINATION .)
 install(DIRECTORY assets DESTINATION .)
-install(FILES README.md DESTINATION .)
+install(FILES README.md LICENSE DESTINATION .)
+install(DIRECTORY docs DESTINATION .)
 install(FILES "${SDL3_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME SDL.txt)
 install(FILES "${imgui_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME ImGui.txt)
 set(CPACK_GENERATOR ZIP)

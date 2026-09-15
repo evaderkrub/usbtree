@@ -22,7 +22,7 @@ $folderName = 'USB Tree ' + [char]0x03A9
 $relocated = Join-Path $testRoot $folderName
 New-Item -ItemType Directory -Force $relocated | Out-Null
 Copy-Item -LiteralPath $Executable -Destination (Join-Path $relocated 'UsbTree.exe') -Force
-foreach ($item in @('assets','licenses','README.md')) {
+foreach ($item in @('assets','licenses','docs','README.md','LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $sourceFolder $item) -Destination $relocated -Recurse -Force
 }
 $usedDrives = @([IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0,1) })
@@ -46,4 +46,3 @@ try {
     if ($mapped) { & "$env:SystemRoot\System32\subst.exe" $drive /D }
 }
 "Passed: static runtime imports, Unicode folder, different executable drive, foreign working directory, minimal PATH." | Tee-Object -FilePath (Join-Path $testRoot 'result.txt')
-

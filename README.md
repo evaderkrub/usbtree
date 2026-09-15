@@ -4,6 +4,10 @@ A native USB topology explorer inspired by [Uwe Sieber's USB Device Tree Viewer]
 
 C++20, SDL3, and Dear ImGui **docking**. Windows enumeration works today. The application model and interface are shared; macOS and Linux enumeration backends are still to be implemented.
 
+![USB Tree on Windows showing a FreeWili hub and its connected devices](docs/screenshots/usbtree.png)
+
+[Windows downloads](https://github.com/evaderkrub/usbtree/releases) · [MIT license](LICENSE)
+
 ## Run the portable application
 
 Copy the **entire USB Tree folder**, then run **UsbTree.exe**. No installer, administrator account, SDL DLL or Visual C++ redistributable is needed for normal inspection. Windows system DLLs are provided by Windows itself.
@@ -146,3 +150,7 @@ Descriptor access and connector details depend on the Windows USB stack and the 
 ## Visual provenance
 
 Open Sans, Fira Code, Material Icons and the Wili Dark theme palette/metrics are copied or adapted from fwcom as requested. See assets/NOTICE.md and the included font licenses. The fwcom source repository was not modified. This is an independent implementation; no UsbTreeView executable or source is redistributed.
+
+## License
+
+USB Tree's project code is licensed under the [MIT License](LICENSE), copyright (c) 2026 Dave Robins. Third-party libraries, fonts and generated icon definitions retain their own licenses and notices; see [asset notices](assets/NOTICE.md), the bundled license files, and the pinned dependencies.
