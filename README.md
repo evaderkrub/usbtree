@@ -37,6 +37,7 @@ Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. The macOS build
 - GUI scaling from 75% to 200%, plus system display scaling.
 - Saved GUI scale, window dimensions, empty-port preference, device-change watching, selection and docking layout.
 - A modal About dialog.
+- A custom application icon for the Windows executable, SDL window and macOS app bundle.
 
 ### Controls
 

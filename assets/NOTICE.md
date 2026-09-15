@@ -1,5 +1,7 @@
 # Asset provenance
 
+The USB Tree application icon in icons/ was created for this project using imagegen. See icons/README.md for the master, native formats and generation prompt. It is included with the project's MIT-licensed assets.
+
 Copied from fwcom on 2026-09-15:
 
 - fonts/OpenSans-Regular.ttf, OpenSans-SemiBold.ttf: Open Sans, SIL Open Font License; see OFL-OpenSans.txt.

@@ -14,6 +14,16 @@
 namespace platform {
 namespace {
 struct ScanResult { app::Snapshot snapshot; std::string error; bool ok = false; };
+bool set_window_icon(SDL_Window* window, const std::filesystem::path& base, std::string& error) {
+    const auto filename = (base / "assets" / "icons" / "usbtree.bmp").u8string();
+    SDL_Surface* icon = SDL_LoadBMP(reinterpret_cast<const char*>(filename.c_str()));
+    if (!icon) { error = SDL_GetError(); return false; }
+    // BMP preserves alpha while keeping the portable application independent of an image-codec library.
+    const bool ok = SDL_SetWindowIcon(window, icon);
+    if (!ok) error = SDL_GetError();
+    SDL_DestroySurface(icon);
+    return ok;
+}
 bool capture(SDL_Renderer* renderer, const std::filesystem::path& path, std::string& error) {
     std::error_code ec; std::filesystem::create_directories(path.parent_path(),ec);
     if (ec) { error = ec.message(); return false; }
@@ -47,6 +57,8 @@ int run_app(int argc, char** argv) {
         app::load_preferences(preferences,state,width,height);
     auto* window = SDL_CreateWindow("USB Tree",width,height,SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window) { SDL_Quit(); return 1; }
+    // Some Linux window managers control their own icons; that must not prevent device inspection.
+    if (!set_window_icon(window,base,error)) std::cerr << "Window icon: " << error << '\n';
     SDL_SetWindowMinimumSize(window,800,560);
     auto* renderer = SDL_CreateRenderer(window,nullptr);
     if (!renderer) { SDL_DestroyWindow(window); SDL_Quit(); return 1; }

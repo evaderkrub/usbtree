@@ -60,7 +60,16 @@ add_executable(UsbTree WIN32 src/main.cpp src/platform/desktop.cpp ${UI_SOURCES}
 target_link_libraries(UsbTree PRIVATE usbtree_platform imgui)
 project_warnings(UsbTree)
 set_target_properties(UsbTree PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/portable/UsbTree")
+if(WIN32)
+  enable_language(RC)
+  configure_file(src/platform/windows/app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
+  target_sources(UsbTree PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+  set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/app.rc" PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/usbtree.ico")
+endif()
 if(APPLE)
+  target_sources(UsbTree PRIVATE assets/icons/usbtree.icns)
+  set_source_files_properties(assets/icons/usbtree.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
   set_target_properties(UsbTree PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/cmake/Info.plist.in")
