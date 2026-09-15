@@ -14,13 +14,13 @@ void about(app::State& s, const Fonts& fonts) {
     ImGui::SetNextWindowSizeConstraints({0,0},{vp->Size.x - 40,vp->Size.y - 40});
     if (ImGui::BeginPopupModal("About USB Tree", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::PushFont(fonts.bold,26); ImGui::TextUnformatted(ICON_MD_USB "  USB Tree"); ImGui::PopFont();
-        ImGui::TextDisabled("Version 0.1.0  /  Windows preview"); ImGui::Separator();
+        ImGui::TextDisabled("Version 0.1.0  /  Desktop preview"); ImGui::Separator();
         ImGui::TextWrapped("Explore the devices, hubs and connections behind your USB ports.");
         ImGui::Spacing();
         ImGui::TextWrapped("Inspired by Uwe Sieber's USB Device Tree Viewer. An independent C++20 application using SDL3 and Dear ImGui docking.");
         ImGui::Spacing();
         ImGui::TextWrapped("Wili Dark styling, Open Sans, Fira Code and Material Icons from fwcom. Third-party notices are included in the portable folder.");
-        ImGui::Spacing(); ImGui::TextDisabled("USB enumeration: Windows\nmacOS and Linux backends: planned"); ImGui::Spacing();
+        ImGui::Spacing(); ImGui::TextDisabled("USB enumeration: Windows and macOS\nLinux backend: planned"); ImGui::Spacing();
         if (ImGui::Button("Close", {-1,0}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }

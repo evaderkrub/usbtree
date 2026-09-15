@@ -2,7 +2,7 @@
 
 A native USB topology explorer inspired by [Uwe Sieber's USB Device Tree Viewer](https://www.uwe-sieber.de/usbtreeview_e.html). It shows how your USB devices connect through controllers, hubs and ports, then lets you inspect their identity, connection speed, descriptors and Windows driver properties.
 
-C++20, SDL3, and Dear ImGui **docking**. Windows enumeration works today. The application model and interface are shared; macOS and Linux enumeration backends are still to be implemented.
+C++20, SDL3, and Dear ImGui **docking**. Windows and macOS enumeration work today. The application model and interface are shared; the Linux enumeration backend is still to be implemented.
 
 ![USB Tree on Windows showing a FreeWili hub and its connected devices](docs/screenshots/usbtree.png)
 
@@ -20,7 +20,7 @@ The distributable ZIP is in:
 
     C:\buildfiles\usbtree\release\packages
 
-Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. No installation or verification has been performed on macOS or Linux.
+Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. The macOS build has also been verified on Apple Silicon; Linux has not been verified.
 
 ## Features
 
@@ -31,7 +31,7 @@ Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. No installation
 - Device identity, negotiated USB speed, manufacturer, serial, driver provider/version, PnP status, location, connector and companion-port information where Windows provides them.
 - Device descriptors, configuration/interface/endpoint decoding, and raw hexadecimal bytes.
 - Read-only inspection with visible warnings for inaccessible hubs or descriptor queries. Failed scans preserve the previous successful snapshot.
-- Background scanning, manual refresh and debounced Windows connection/removal notifications.
+- Background scanning, manual refresh and debounced Windows/macOS connection/removal notifications.
 - Selection preserved across refresh; removal of the selected device returns to the computer overview.
 - Copy the selected device report, or export a complete UTF-8 text report.
 - GUI scaling from 75% to 200%, plus system display scaling.
@@ -48,7 +48,7 @@ Target: Windows 10/11 x64 with MSVC. Verified on Windows 11 x64. No installation
 | Scale selector | Set GUI scale |
 | Empty ports | Include unused hub ports |
 | Expand / collapse icons | Open / close the tree |
-| Watch device changes | Refresh after Windows device notifications |
+| Watch device changes | Refresh after system device notifications |
 | Copy details / device context menu | Copy the selected device's text report |
 | Export | Save the complete report in the portable folder's reports directory |
 | Layout icon | Restore the two-pane docking layout |
@@ -96,7 +96,30 @@ For an assertion-enabled build:
 
 With a configured MSVC development shell, you can also run cmake --preset windows-release, cmake --build --preset windows-release, and ctest --preset windows-release.
 
-On macOS/Linux the shared UI can be built with CMake/Ninja and run with --demo. The native backend currently reports that enumeration is not implemented there; these builds have not been verified yet.
+### macOS
+
+Requires Xcode Command Line Tools, CMake 3.24 or newer, and Ninja. Build, test and launch:
+
+```sh
+./scripts/build-macos.sh --run
+```
+
+Or run the individual steps:
+
+```sh
+cmake --preset macos-release
+cmake --build --preset macos-release --parallel
+ctest --preset macos-release
+open "$HOME/buildfiles/usbtree/macos-release/portable/UsbTree/UsbTree.app"
+```
+
+Build output stays in `~/buildfiles/usbtree/macos-release`. Double-click `UsbTree.app` to launch without a console window. Keep the app and its adjacent assets together in the portable folder. Settings, reports and captures are stored beside the app. The app bundle is not signed for distribution.
+
+The macOS backend reads controller/hub/device topology from the I/O Registry using [Apple's IOKit registry APIs](https://developer.apple.com/documentation/iokit/1514496-ioregistryentrygetchildentry). It displays identity, serial, location, driver class and connection speed when published by macOS, and watches for USB device arrivals/removals. It does not claim devices or require administrator access. Raw descriptors, unused ports and serial/volume mappings are not collected on macOS. F5 or Refresh also rescans manually.
+
+Verified on Apple Silicon with the model tests, ImGui end-to-end tests, a live registry scan and rendered startup capture. This machine exposed one controller with no connected devices during verification; populated hardware trees and physical hotplug still need a hardware check.
+
+On Linux the shared UI can be built with CMake/Ninja and run with `--demo`; native enumeration is not yet implemented.
 
 ## Tests and visual verification
 
@@ -146,7 +169,7 @@ Windows access mappings follow the PnP parent chain from [COM-port interfaces](h
 
 ## Current scope
 
-This is a working first Windows version, not full UsbTreeView feature parity. It does not yet implement macOS/Linux enumeration, device eject/restart, USB4/Thunderbolt topology, saved-report import, or audio/video/HID class-specific descriptor decoding. Child PnP functions are listed as properties of their USB device.
+This is a working first Windows version, not full UsbTreeView feature parity. It does not yet implement Linux enumeration, device eject/restart, USB4/Thunderbolt topology, saved-report import, or audio/video/HID class-specific descriptor decoding. Child PnP functions are listed as properties of their USB device.
 
 Descriptor access and connector details depend on the Windows USB stack and the device. SuperSpeedPlus is shown as 10 Gbit/s or higher; exact 10/20 Gbit/s lane rates are not inferred. Port numbers describe logical hub ports, which may include firmware-defined or internal ports.
 

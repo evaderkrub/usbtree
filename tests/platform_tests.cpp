@@ -15,7 +15,7 @@ int main() {
     std::set<std::string> ids;
     if (!validate(snapshot.root, ids)) { std::cerr << "Duplicate or missing node IDs\n"; return 1; }
     const auto counts = app::count(snapshot.root);
-    std::cout << "Live Windows topology: " << counts.controllers << " controllers, " << counts.hubs << " hubs, " << counts.devices << " devices, " << counts.empty_ports << " empty ports\n";
+    std::cout << "Live USB topology: " << counts.controllers << " controllers, " << counts.hubs << " hubs, " << counts.devices << " devices, " << counts.empty_ports << " empty ports\n";
     for (const auto& warning : snapshot.warnings) std::cout << "Warning: " << warning << '\n';
     std::filesystem::path base;
     if (!platform::executable_directory(base, error) || !platform::write_text(base / "test-results" / "live-topology.txt", app::full_report(snapshot), error)) {

@@ -20,6 +20,8 @@ void frame(SDL_Renderer* renderer, app::State& state, const Fonts& fonts, float 
     ImGui_ImplSDLRenderer3_NewFrame(); ImGui_ImplSDL3_NewFrame(); ImGui::NewFrame();
     draw_workspace(state, fonts);
     ImGui::Render();
+    const auto framebuffer_scale = ImGui::GetIO().DisplayFramebufferScale;
+    SDL_SetRenderScale(renderer, framebuffer_scale.x, framebuffer_scale.y);
     SDL_SetRenderDrawColor(renderer,22,23,27,255); SDL_RenderClear(renderer);
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
 }

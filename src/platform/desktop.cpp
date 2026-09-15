@@ -110,7 +110,10 @@ int run_app(int argc, char** argv) {
         if (state.requested_width && state.requested_height) {
             SDL_SetWindowSize(window,state.requested_width,state.requested_height); state.requested_width = state.requested_height = 0;
         }
-        ui::frame(renderer,state,fonts,SDL_GetWindowDisplayScale(window));
+        // ImGui uses window coordinates; its SDL renderer already applies pixel density.
+        const float density = SDL_GetWindowPixelDensity(window);
+        const float display_scale = SDL_GetWindowDisplayScale(window);
+        ui::frame(renderer,state,fonts,density > 0 && display_scale > 0 ? display_scale / density : 1.0f);
         if (!state.capture_name.empty()) {
             if (!capture(renderer,base / "captures" / std::filesystem::path(state.capture_name).filename(),state.error)) exit_code = 1;
             state.capture_name.clear();

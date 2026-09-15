@@ -1,9 +1,66 @@
 {
   "version": 5,
   "configurePresets": [
-    {"name":"windows-release", "generator":"Ninja", "binaryDir":"C:/buildfiles/usbtree/release", "cacheVariables":{"CMAKE_BUILD_TYPE":"Release", "BUILD_TESTING":"ON"}},
-    {"name":"windows-debug", "inherits":"windows-release", "binaryDir":"C:/buildfiles/usbtree/debug", "cacheVariables":{"CMAKE_BUILD_TYPE":"Debug"}}
+    {
+      "name": "windows-release",
+      "generator": "Ninja",
+      "binaryDir": "C:/buildfiles/usbtree/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "inherits": "windows-release",
+      "binaryDir": "C:/buildfiles/usbtree/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "macos-release",
+      "generator": "Ninja",
+      "binaryDir": "$env{HOME}/buildfiles/usbtree/macos-release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON"
+      }
+    }
   ],
-  "buildPresets": [{"name":"windows-release","configurePreset":"windows-release"},{"name":"windows-debug","configurePreset":"windows-debug"}],
-  "testPresets": [{"name":"windows-release","configurePreset":"windows-release","output":{"outputOnFailure":true}}]
+  "buildPresets": [
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release"
+    },
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug"
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
 }
