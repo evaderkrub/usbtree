@@ -8,4 +8,6 @@ bool initialize(SDL_Window* window, SDL_Renderer* renderer, const std::filesyste
 void process_event(const SDL_Event& event);
 void frame(SDL_Renderer* renderer, app::State& state, const Fonts& fonts, float dpi);
 void shutdown();
+void load_layout(const std::string& text);
+std::string save_layout();
 }

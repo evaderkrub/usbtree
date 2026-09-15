@@ -28,13 +28,16 @@ struct State {
     Snapshot snapshot;
     std::string selected_id, error, notice;
     std::array<char, 256> search{};
-    bool show_empty = true, auto_refresh = true, scanning = false;
+    bool show_empty = false, auto_refresh = true, scanning = false;
     bool refresh_requested = true, export_requested = false, copy_requested = false;
     bool about_open = false, reset_layout = false, focus_search = false;
     int expand_tree = 0;
     float scale = 1.0f;
     unsigned generation = 0;
     std::string report;
+    bool demo = false;
+    std::string capture_name;
+    int requested_width = 0, requested_height = 0;
 };
 const char* kind_name(Kind kind);
 std::string hex(std::uint32_t value, int width = 4);
@@ -49,4 +52,6 @@ std::string hex_dump(const std::vector<std::uint8_t>& bytes);
 bool decode_configuration(const std::vector<std::uint8_t>& bytes, std::vector<Property>& rows, std::string& error);
 float clamp_scale(float value);
 Snapshot demo_snapshot();
+std::string save_preferences(const State& state, int width, int height);
+void load_preferences(const std::string& text, State& state, int& width, int& height);
 }

@@ -5,6 +5,30 @@
 #include <iomanip>
 #include <sstream>
 namespace platform {
+bool read_binary(const std::filesystem::path& path, std::vector<std::uint8_t>& bytes, std::string& error) noexcept {
+    try {
+        bytes.clear(); error.clear();
+        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        if (!in || in.tellg() <= 0 || in.tellg() > 16000000) { error = "Cannot read asset file"; return false; }
+        bytes.resize(static_cast<std::size_t>(in.tellg()));
+        in.seekg(0); in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!in) { error = "Cannot read asset file"; return false; }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+bool read_text(const std::filesystem::path& path, std::string& text, std::string& error) noexcept {
+    try {
+        text.clear(); error.clear();
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec) && !ec) return true;
+        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        if (!in || in.tellg() < 0 || in.tellg() > 1048576) { error = "Cannot read settings file"; return false; }
+        text.resize(static_cast<std::size_t>(in.tellg()));
+        in.seekg(0); in.read(text.data(), static_cast<std::streamsize>(text.size()));
+        if (!in) { error = "Cannot read settings file"; return false; }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
 bool executable_directory(std::filesystem::path& path, std::string& error) noexcept {
     try {
         const char* base = SDL_GetBasePath();

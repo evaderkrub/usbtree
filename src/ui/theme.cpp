@@ -1,21 +1,19 @@
 #include "ui/theme.h"
 #include "imgui.h"
 #include "ui/icons.h"
-#include <fstream>
+#include "platform/files.h"
+#include <cstring>
 
 namespace ui {
 namespace {
 ImVec4 rgb(int r, int g, int b, float a = 1.0f) { return {r/255.0f, g/255.0f, b/255.0f, a}; }
 ImFont* load(const std::filesystem::path& p, float size, const ImFontConfig* config = nullptr, const ImWchar* ranges = nullptr) {
-    // Read with a filesystem path so portable folders with non-ASCII names work on Windows.
-    std::ifstream in(p, std::ios::binary | std::ios::ate);
-    if (!in) return nullptr;
-    const auto size_in = in.tellg();
-    if (size_in <= 0 || size_in > 16000000) return nullptr;
-    void* bytes = IM_ALLOC(static_cast<std::size_t>(size_in));
-    in.seekg(0); in.read(static_cast<char*>(bytes), static_cast<std::streamsize>(size_in));
-    if (!in) { IM_FREE(bytes); return nullptr; }
-    return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(bytes, static_cast<int>(size_in), size, config, ranges);
+    std::vector<std::uint8_t> data; std::string error;
+    if (!platform::read_binary(p, data, error)) return nullptr;
+    // The atlas retains font bytes for dynamic rasterization at different scales.
+    void* bytes = IM_ALLOC(data.size());
+    std::memcpy(bytes, data.data(), data.size());
+    return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(bytes, static_cast<int>(data.size()), size, config, ranges);
 }
 }
 bool load_fonts(const std::filesystem::path& assets, Fonts& fonts, std::string& error) {

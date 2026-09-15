@@ -24,6 +24,16 @@ int main() {
         check(!app::decode_configuration(bad, rows, error), "Reject truncated descriptors");
         check(app::clamp_scale(std::numeric_limits<float>::quiet_NaN()) == 1 && app::clamp_scale(8) == 2, "Clamp invalid GUI scale");
         check(app::full_report(snapshot).find("Studio Keyboard") != std::string::npos, "Report includes topology");
+        app::Node unavailable; unavailable.connected = false; unavailable.problem_code = 1;
+        check(app::count(unavailable).devices == 0 && app::count(unavailable).problems == 1, "Unavailable port is not a connected device");
+        app::State restored; int w = 1440, h = 900;
+        s.scale = 1.5f; s.selected_id = "USB\\quoted ID"; s.show_empty = true;
+        app::load_preferences(app::save_preferences(s, 1200, 800), restored, w, h);
+        check(restored.scale == 1.5f && restored.selected_id == s.selected_id && restored.show_empty && w == 1200 && h == 800, "Preferences round trip");
+        app::load_preferences("broken preferences", restored, w, h);
+        check(restored.scale == 1.5f, "Corrupt preferences preserve defaults");
+        app::load_preferences("99 0 1 -100 99999", restored, w, h);
+        check(restored.scale == 2 && w == 800 && h == 4320, "Clamp invalid saved dimensions");
         std::cout << "All model tests passed\n"; return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

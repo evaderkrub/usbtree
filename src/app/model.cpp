@@ -39,7 +39,7 @@ Counts count(const Node& root) {
     Counts c;
     c.controllers = root.kind == Kind::Controller;
     c.hubs = root.kind == Kind::Hub;
-    c.devices = root.kind == Kind::Device;
+    c.devices = root.kind == Kind::Device && root.connected;
     c.empty_ports = root.kind == Kind::EmptyPort;
     c.problems = root.problem_code != 0;
     for (const auto& child : root.children) {
@@ -55,8 +55,10 @@ const Node* find(const Node& root, const std::string& id) {
     return nullptr;
 }
 bool matches(const Node& n, const std::string& query) {
-    const auto haystack = lower(n.name + " " + n.manufacturer + " " + n.instance_id + " " + n.serial + " " + n.service + " " +
-        hex(n.vendor_id) + ":" + hex(n.product_id) + " " + n.speed + " " + n.status);
+    std::string searchable = n.name + " " + n.manufacturer + " " + n.instance_id + " " + n.serial + " " + n.service + " " +
+        hex(n.vendor_id) + ":" + hex(n.product_id) + " " + n.speed + " " + n.status;
+    for (const auto& p : n.properties) searchable += " " + p.value;
+    const auto haystack = lower(std::move(searchable));
     std::istringstream tokens(lower(query));
     std::string token;
     while (tokens >> token) if (haystack.find(token) == std::string::npos) return false;
@@ -111,7 +113,7 @@ bool decode_configuration(const std::vector<std::uint8_t>& b, std::vector<Proper
         } else if (type == 5) {
             constexpr const char* transfers[] = {"Control", "Isochronous", "Bulk", "Interrupt"};
             rows.push_back({"Endpoint 0x" + hex(d[2], 2), std::string((d[2] & 0x80) ? "IN / " : "OUT / ") + transfers[d[3] & 3] +
-                " / max packet " + std::to_string(d[4] | (d[5] << 8)) + " / interval " + std::to_string(d[6])});
+                " / packet " + std::to_string((d[4] | (d[5] << 8)) & 0x7ff) + " bytes / wMaxPacketSize 0x" + hex(d[4] | (d[5] << 8)) + " / interval " + std::to_string(d[6])});
         } else rows.push_back({"Descriptor 0x" + hex(d[1], 2), std::to_string(d[0]) + " bytes at offset " + std::to_string(offset)});
         offset += d[0];
     }
@@ -141,6 +143,18 @@ std::string full_report(const Snapshot& s) {
     return o.str();
 }
 float clamp_scale(float value) { return std::isfinite(value) ? std::clamp(value, 0.75f, 2.0f) : 1.0f; }
+std::string save_preferences(const State& state, int width, int height) {
+    std::ostringstream out;
+    out << state.scale << ' ' << state.show_empty << ' ' << state.auto_refresh << ' ' << width << ' ' << height << '\n' << std::quoted(state.selected_id);
+    return out.str();
+}
+void load_preferences(const std::string& text, State& state, int& width, int& height) {
+    std::istringstream in(text); float scale = 1; bool empty = false, automatic = true; int w = 1440, h = 900; std::string selected;
+    if (!(in >> scale >> empty >> automatic >> w >> h)) return;
+    in >> std::quoted(selected);
+    state.scale = clamp_scale(scale); state.show_empty = empty; state.auto_refresh = automatic;
+    state.selected_id = std::move(selected); width = std::clamp(w, 800, 7680); height = std::clamp(h, 560, 4320);
+}
 Snapshot demo_snapshot() {
     Snapshot s; s.captured_at = "Test fixture";
     s.root.id = "computer"; s.root.name = "Test workstation"; s.root.kind = Kind::Computer;
@@ -149,6 +163,7 @@ Snapshot demo_snapshot() {
     Node d; d.id = "keyboard"; d.name = "Studio Keyboard"; d.manufacturer = "Test Devices";
     d.vendor_id = 0x1234; d.product_id = 0xabcd; d.port = 1; d.speed = "Full-Speed (12 Mbit/s)";
     d.serial = "TEST-001"; d.instance_id = "USB\\VID_1234&PID_ABCD\\TEST-001"; d.service = "HidUsb";
+    d.usb_version = 0x0200;
     d.device_descriptor = {18,1,0,2,0,0,0,64,0x34,0x12,0xcd,0xab,0,1,1,2,3,1};
     d.configuration = {9,2,25,0,1,1,0,0x80,50,9,4,0,0,1,3,1,1,0,7,5,0x81,3,8,0,10};
     h.children.push_back(d);
