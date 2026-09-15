@@ -1,0 +1,9 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {"name":"windows-release", "generator":"Ninja", "binaryDir":"C:/buildfiles/usbtree/release", "cacheVariables":{"CMAKE_BUILD_TYPE":"Release", "BUILD_TESTING":"ON"}},
+    {"name":"windows-debug", "inherits":"windows-release", "binaryDir":"C:/buildfiles/usbtree/debug", "cacheVariables":{"CMAKE_BUILD_TYPE":"Debug"}}
+  ],
+  "buildPresets": [{"name":"windows-release","configurePreset":"windows-release"},{"name":"windows-debug","configurePreset":"windows-debug"}],
+  "testPresets": [{"name":"windows-release","configurePreset":"windows-release","output":{"outputOnFailure":true}}]
+}

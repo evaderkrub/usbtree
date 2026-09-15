@@ -1,0 +1,72 @@
+cmake_minimum_required(VERSION 3.24)
+project(UsbTree VERSION 0.1.0 LANGUAGES C CXX)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "Use an out-of-source build in C:/buildfiles/usbtree")
+endif()
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+include(FetchContent)
+include(CTest)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SDL_LIBC ON CACHE BOOL "" FORCE)
+FetchContent_Declare(SDL3 URL https://codeload.github.com/libsdl-org/SDL/zip/7f3ae3d57459e59943a4ecfefc8f6277ec6bf540 DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_Declare(imgui URL https://codeload.github.com/ocornut/imgui/zip/572f249ce1975f98ad9f8aabce512ffa12a52d6c DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(SDL3 imgui)
+
+function(project_warnings target)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+    target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+  else()
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+endfunction()
+
+set(IMGUI_SOURCES ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp)
+add_library(imgui STATIC ${IMGUI_SOURCES})
+target_include_directories(imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+
+add_library(usbtree_app STATIC src/app/model.cpp)
+target_include_directories(usbtree_app PUBLIC src)
+project_warnings(usbtree_app)
+set(PLATFORM_SOURCES src/platform/files.cpp src/platform/usb_stub.cpp)
+if(WIN32)
+  set(PLATFORM_SOURCES src/platform/files.cpp src/platform/usb_windows.cpp)
+endif()
+add_library(usbtree_platform STATIC ${PLATFORM_SOURCES})
+target_link_libraries(usbtree_platform PUBLIC usbtree_app SDL3::SDL3-static)
+if(WIN32)
+  target_link_libraries(usbtree_platform PRIVATE setupapi cfgmgr32)
+endif()
+project_warnings(usbtree_platform)
+
+set(UI_SOURCES src/ui/theme.cpp src/ui/workspace.cpp src/ui/renderer.cpp)
+add_executable(UsbTree WIN32 src/main.cpp src/platform/desktop.cpp ${UI_SOURCES})
+target_link_libraries(UsbTree PRIVATE usbtree_platform imgui)
+project_warnings(UsbTree)
+set_target_properties(UsbTree PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/portable/UsbTree")
+add_custom_target(stage_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "${CMAKE_BINARY_DIR}/portable/UsbTree/assets"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/README.md" "${CMAKE_BINARY_DIR}/portable/UsbTree/README.md"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL3_SOURCE_DIR}/LICENSE.txt" "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses/SDL.txt"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${imgui_SOURCE_DIR}/LICENSE.txt" "${CMAKE_BINARY_DIR}/portable/UsbTree/licenses/ImGui.txt")
+add_dependencies(UsbTree stage_assets)
+
+if(BUILD_TESTING)
+  add_executable(model_tests tests/model_tests.cpp)
+  target_link_libraries(model_tests PRIVATE usbtree_app)
+  project_warnings(model_tests)
+  add_test(NAME model COMMAND model_tests)
+endif()
